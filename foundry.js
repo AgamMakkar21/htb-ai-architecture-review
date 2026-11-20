@@ -15,34 +15,50 @@ const severities = ['high', 'medium', 'low', 'question'];
 function responseFormat(checks) {
   return {
     type: 'json_schema',
-    json_schema: {
-      name: 'architecture_review',
-      strict: true,
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['findings'],
-        properties: {
-          findings: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['category', 'severity', 'finding', 'evidence', 'action', 'question'],
-              properties: {
-                category: { type: 'string', enum: checks.map(({ id }) => id) },
-                severity: { type: 'string', enum: severities },
-                finding: { type: 'string' },
-                evidence: { type: ['string', 'null'] },
-                action: { type: ['string', 'null'] },
-                question: { type: ['string', 'null'] },
-              },
+    name: 'architecture_review',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['findings'],
+      properties: {
+        findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['category', 'severity', 'finding', 'evidence', 'action', 'question'],
+            properties: {
+              category: { type: 'string', enum: checks.map(({ id }) => id) },
+              severity: { type: 'string', enum: severities },
+              finding: { type: 'string' },
+              evidence: { type: ['string', 'null'] },
+              action: { type: ['string', 'null'] },
+              question: { type: ['string', 'null'] },
             },
           },
         },
       },
     },
   };
+}
+
+function reviewText(result) {
+  const parts = Array.isArray(result?.output) ? result.output.flatMap((item) =>
+    item?.type === 'message' && item.role === 'assistant' && Array.isArray(item.content) ? item.content : [],
+  ) : [];
+  if (result?.incomplete_details?.reason === 'content_filter' || parts.some((part) => part?.type === 'refusal')) {
+    throw new ReviewError(502, 'Foundry declined this brief. Try the synthetic example or remove sensitive details.');
+  }
+  if (result?.status === 'incomplete') {
+    throw new ReviewError(502, 'Foundry returned an incomplete review. Try a shorter brief or select fewer categories.');
+  }
+  const content = parts.filter((part) => part?.type === 'output_text' && typeof part.text === 'string')
+    .map(({ text }) => text).join('').trim();
+  if (result?.status !== 'completed' || !content) {
+    throw new ReviewError(502, 'Foundry did not return a usable review. Run the review again.');
+  }
+  return content;
 }
 
 const text = (value, limit) => typeof value === 'string' && value.trim().length <= limit ? value.trim() : '';
@@ -87,16 +103,11 @@ function readPrice(value, name) {
 }
 
 export function configureFoundry(env, appService) {
-  let url;
-  try {
-    url = new URL(env.AZURE_OPENAI_ENDPOINT);
-  } catch {
-    throw new Error('Set AZURE_OPENAI_ENDPOINT to the Azure OpenAI resource URL in the Hack-to-Build sandbox.');
-  }
-  if (url.protocol !== 'https:' || url.username || url.password || url.port || url.search || url.hash ||
-      !/^\/(?:openai\/v1\/?)?$/.test(url.pathname) ||
-      !/^[a-z0-9-]+\.(?:openai|services\.ai)\.azure\.com$/.test(url.hostname)) {
-    throw new Error('Use an Azure OpenAI or Foundry resource endpoint, not a Foundry project URL.');
+  const url = URL.parse(env.AZURE_OPENAI_ENDPOINT ?? '');
+  if (!url || url.protocol !== 'https:' || url.username || url.password || url.port || url.search || url.hash ||
+      !/^\/api\/projects\/[\w-]+\/openai\/v1\/responses\/?$/.test(url.pathname) ||
+      !/^[a-z0-9-]+\.services\.ai\.azure\.com$/.test(url.hostname)) {
+    throw new Error('Set AZURE_OPENAI_ENDPOINT to the full sandbox Foundry project URL ending in /openai/v1/responses.');
   }
   const deployment = env.AZURE_OPENAI_DEPLOYMENT?.trim();
   if (!deployment) throw new Error('Set AZURE_OPENAI_DEPLOYMENT to the sandbox model deployment name.');
@@ -108,7 +119,7 @@ export function configureFoundry(env, appService) {
     : new AzureCliCredential({ subscription: env.AZURE_SUBSCRIPTION_ID, processTimeoutInMs: 12000 });
 
   return {
-    endpoint: `${url.origin}/openai/v1/chat/completions`,
+    endpoint: `${url.origin}${url.pathname.replace(/\/$/, '')}`,
     deployment,
     getToken: getBearerTokenProvider(credential, 'https://ai.azure.com/.default'),
     inputPrice: readPrice(env.FOUNDRY_INPUT_USD_PER_MILLION, 'FOUNDRY_INPUT_USD_PER_MILLION'),
@@ -131,19 +142,17 @@ export function foundryReviewer({ endpoint, deployment, getToken, inputPrice, ou
       response = await request(endpoint, {
         method: 'POST',
         redirect: 'error',
-        signal: AbortSignal.timeout(45000),
+        signal: AbortSignal.timeout(60000),
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model: deployment,
           store: false,
-          max_completion_tokens: 3000,
-          response_format: responseFormat(checks),
-          messages: [
-            { role: 'system', content: `${instructions}\n\nChecks:\n${JSON.stringify(checks.map(
-              ({ id, label, check, source }) => ({ id, label, check, guidance: source.guidance }),
-            ))}` },
-            { role: 'user', content: JSON.stringify({ workload: workloads[workload], architecture, requirements }) },
-          ],
+          max_output_tokens: 4096,
+          text: { format: responseFormat(checks) },
+          instructions: `${instructions}\n\nChecks:\n${JSON.stringify(checks.map(
+            ({ id, label, check, source }) => ({ id, label, check, guidance: source.guidance }),
+          ))}`,
+          input: JSON.stringify({ workload: workloads[workload], architecture, requirements }),
         }),
       });
       if (response.ok) result = await response.json();
@@ -154,15 +163,14 @@ export function foundryReviewer({ endpoint, deployment, getToken, inputPrice, ou
     }
     if (!response.ok) {
       if (response.status === 429) throw new ReviewError(503, 'Foundry is throttling reviews. Wait a moment and try again.');
-      throw new ReviewError(502, `Foundry rejected the request (HTTP ${response.status}). Check the endpoint, deployment, model support, and role assignment.`);
+      if (response.status === 401 || response.status === 403) {
+        throw new ReviewError(502, `Foundry denied access (HTTP ${response.status}). Check the sandbox identity and its role assignment on the Foundry resource.`);
+      }
+      throw new ReviewError(502, `Foundry rejected the request (HTTP ${response.status}). Check the project endpoint, deployment name, and model support.`);
     }
-    const choice = result?.choices?.[0];
-    if (choice?.finish_reason !== 'stop' || choice.message?.refusal || !choice.message?.content) {
-      throw new ReviewError(502, 'Foundry did not return a complete review. Try a shorter synthetic architecture.');
-    }
-    const findings = verifiedFindings(choice.message.content, { architecture, requirements, checks });
-    const inputTokens = result.usage?.prompt_tokens;
-    const outputTokens = result.usage?.completion_tokens;
+    const findings = verifiedFindings(reviewText(result), { architecture, requirements, checks });
+    const inputTokens = result.usage?.input_tokens;
+    const outputTokens = result.usage?.output_tokens;
     const usage = [inputTokens, outputTokens].every((n) => Number.isSafeInteger(n) && n >= 0)
       ? {
           inputTokens, outputTokens,

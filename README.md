@@ -15,14 +15,14 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000), select **Load example**, th
 
 The default **Local checklist** runs without Azure credentials or model calls. It matches a few patterns and asks for clarification on the remaining categories; it does not reason over the design. **Microsoft Foundry** mode uses a deployed model to assess the brief and returns its latency and token usage. The optional rate settings in [.env.example](.env.example) add an estimate of model cost only, not hosting or total pilot cost.
 
-Run the three focused checks with `npm.cmd test`. The Foundry contract tests use a stub; they do not call Azure.
+Run `npm.cmd test` for the local workflow and Foundry contract checks. The contract tests use a stub; they do not call Azure.
 
 ## Use the verified Hack-to-Build sandbox
 
-Use the **sandbox** Entra account and subscription, not your personal Azure environment. The app needs the Azure OpenAI **resource endpoint**, a **model deployment name**, and an authorized identity. Do not copy passwords, tokens, or API keys into the repo or chat.
+Use the **sandbox** Entra account and subscription, not your personal Azure environment. The app needs the full **Foundry project Responses endpoint**, the **model deployment name**, and an authorized identity. Do not copy passwords, tokens, or API keys into the repo or chat.
 
-1. In the sandbox, [deploy an Azure OpenAI model in Microsoft Foundry](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/deploy-foundry-models) that supports [structured outputs](https://learn.microsoft.com/azure/foundry/openai/how-to/structured-outputs), such as `gpt-4.1-mini` if it is available in your region and quota. Record the deployment name and the resource endpoint (`https://<resource>.openai.azure.com` or `https://<resource>.services.ai.azure.com`), not the project URL.
-2. To test the model locally, assign your sandbox user **Cognitive Services OpenAI User** on that resource. Use an isolated CLI profile in the same PowerShell window that will run the app:
+1. Reuse an Azure OpenAI deployment that supports [Responses](https://learn.microsoft.com/azure/foundry/openai/how-to/responses) and [structured outputs](https://learn.microsoft.com/azure/foundry/openai/how-to/structured-outputs), such as `gpt-6.1-terra`. Copy the endpoint ending in `/api/projects/<project>/openai/v1/responses` and the deployment's **Name** from Foundry. The deployment name can differ from the model name.
+2. To test locally, give your sandbox user **Cognitive Services OpenAI User** on the parent Foundry resource as described in the [project Responses guidance](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/generate-responses#troubleshoot-common-errors). Use an isolated CLI profile in the same PowerShell window that will run the app:
 
    ```powershell
    $env:AZURE_CONFIG_DIR = Join-Path $env:LOCALAPPDATA 'azure-htb-sandbox'
@@ -35,16 +35,16 @@ Use the **sandbox** Entra account and subscription, not your personal Azure envi
 
    ```powershell
    $env:REVIEW_MODE = 'foundry'
-   $env:AZURE_OPENAI_ENDPOINT = 'https://<sandbox-resource>.openai.azure.com'
+   $env:AZURE_OPENAI_ENDPOINT = 'https://<sandbox-resource>.services.ai.azure.com/api/projects/<sandbox-project>/openai/v1/responses'
    $env:AZURE_OPENAI_DEPLOYMENT = '<sandbox-deployment-name>'
    npm.cmd start
    ```
 
-3. If you want a hosted demo, create a **Linux Node.js 22+ App Service** in the sandbox. Configure [App Service Authentication with Microsoft Entra ID](https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad) to **Require authentication**, limit access to the intended sandbox users, and require HTTPS before deploying. Enable the app's **system-assigned managed identity** and give it **Cognitive Services OpenAI User** at the model resource scope. Configure `REVIEW_MODE`, `AZURE_OPENAI_ENDPOINT`, and `AZURE_OPENAI_DEPLOYMENT` as App Service settings; the server uses managed identity there.
+3. Use the existing **Linux Node.js 22+ App Service** in the sandbox. Configure [App Service Authentication with Microsoft Entra ID](https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad) to **Require authentication**, limit access to the intended sandbox users, and require HTTPS before deploying. Enable the app's **system-assigned managed identity** and give it **Cognitive Services OpenAI User** on the parent Foundry resource. Set `REVIEW_MODE=foundry`, `AZURE_OPENAI_ENDPOINT`, and `AZURE_OPENAI_DEPLOYMENT` as App Service settings. The hosted app uses managed identity, not Azure CLI or API keys.
 4. Set the Linux startup command to `npm start` and the app setting `SCM_DO_BUILD_DURING_DEPLOYMENT=true`. [Deploy a ZIP](https://learn.microsoft.com/azure/app-service/deploy-zip) with `package.json`, `package-lock.json`, `server.js`, `review.js`, `foundry.js`, and `public/` at its root. Exclude `.env`, `node_modules/`, and anything containing credentials. Open the app after signing in, run the synthetic example, and verify that the report shows **Microsoft Foundry** mode and token counts.
 
 ## PoC boundaries
 
-The Node app supplies the selected, curated Microsoft Learn summaries to the [Azure OpenAI v1 Chat Completions API](https://learn.microsoft.com/azure/foundry/openai/api-version-lifecycle). It checks that evidence is quoted from the brief and attaches the citation for each selected check itself. An architect still verifies that the quote and guidance support the finding.
+The Node app sends the selected Microsoft Learn summaries and the brief to the [Foundry project Responses API](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/generate-responses) with a JSON schema and `store: false` to disable response storage by the API. It checks that evidence is quoted from the brief and attaches the citation for each selected check itself. An architect still verifies that the quote and guidance support the finding.
 
 There is no database, Agent Service project, or Azure AI Search dependency. The app does not persist briefs or log prompt content; form inputs, findings, and feedback are held in the open tab. Feedback resets with a new review. Live mode sends the submitted text to the configured Foundry resource, so use only synthetic or sanitized material. Pilot quality targets and time saved are not measured by this PoC.
