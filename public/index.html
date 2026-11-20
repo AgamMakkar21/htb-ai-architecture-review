@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" data-type="software">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="page-type" content="software">
+  <meta name="site-kind" content="software">
+  <meta name="theme-color" content="#0a0d14">
+  <meta name="description" content="A first-pass review of Azure AI designs for partner architects, with Microsoft Learn guidance and evidence from the brief.">
+  <title>Azure AI Architecture Review Agent</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="wrap masthead-inner">
+      <a class="skip-link" href="#top">Skip to content</a>
+      <a class="wordmark" href="/" aria-label="Architecture Review Agent home">
+        <img src="/icon.svg" width="36" height="36" alt="">
+        <span>Architecture Review Agent</span>
+      </a>
+      <span class="mode" id="mode"><span class="mode-dot" aria-hidden="true"></span><span id="mode-label">Connecting</span></span>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section class="intro" data-enter aria-labelledby="page-title">
+      <p class="eyebrow">Hack-to-Build proof of concept</p>
+      <h1 id="page-title">Azure AI architecture review</h1>
+      <p>Check your design against 5 controls drawn from Microsoft Learn before formal sign-off.</p>
+    </section>
+
+    <div class="workbench" aria-label="Architecture review workspace">
+      <section class="panel brief" aria-labelledby="brief-title">
+        <div class="panel-head">
+          <div class="panel-heading">
+            <span class="step" aria-hidden="true">01</span>
+            <h2 id="brief-title">Architecture brief</h2>
+          </div>
+          <button type="button" class="button secondary" id="load-example" disabled>Load example</button>
+        </div>
+
+        <form id="review-form" class="panel-body" action="/api/review" method="post" autocomplete="off">
+          <fieldset id="brief-fields" class="brief-fields" disabled>
+            <div class="field">
+              <label for="workload">Workload</label>
+              <select id="workload" name="workload" required></select>
+            </div>
+            <div class="field">
+              <label for="architecture">Architecture description</label>
+              <textarea id="architecture" name="architecture" rows="5" required
+                placeholder="Describe the Azure services, data flow, and safeguards in the proposed design."></textarea>
+            </div>
+            <div class="field">
+              <label for="requirements">Workload requirements <span class="muted">(optional)</span></label>
+              <textarea id="requirements" name="requirements" rows="2"
+                placeholder="Add data sensitivity, availability needs, or pilot constraints."></textarea>
+            </div>
+            <fieldset class="field">
+              <legend>Review categories</legend>
+              <div id="categories" class="categories"></div>
+            </fieldset>
+          </fieldset>
+          <div class="form-actions">
+            <button type="submit" class="button primary" id="run-review" disabled>
+              <span id="run-label">Run review</span>
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h11m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <p class="muted" id="data-notice">Use synthetic or sanitized text only.</p>
+          </div>
+          <p role="alert" class="error" id="form-error" hidden></p>
+          <noscript><p class="error">Enable JavaScript to run architecture reviews.</p></noscript>
+        </form>
+      </section>
+
+      <section class="panel report" aria-labelledby="report-title">
+        <div class="panel-head">
+          <div class="panel-heading">
+            <span class="step" aria-hidden="true">02</span>
+            <h2 id="report-title" tabindex="-1">Review findings</h2>
+          </div>
+          <span class="muted report-count" id="report-count"></span>
+        </div>
+        <div class="report-body" id="report-body">
+          <div class="empty" id="empty">
+            <svg class="report-art" viewBox="0 0 184 118" fill="none" aria-hidden="true">
+              <rect x="28" y="12" width="132" height="93" rx="12" fill="#141d2a" stroke="#30455b"/>
+              <path d="M28 34h132" stroke="#30455b"/>
+              <circle cx="42" cy="23" r="2" fill="#5ab9fc"/>
+              <circle cx="50" cy="23" r="2" fill="#43566e"/>
+              <circle cx="58" cy="23" r="2" fill="#43566e"/>
+              <rect x="43" y="47" width="14" height="14" rx="4" fill="#22364c"/>
+              <path d="m47 54 2 2 4-4M66 54h57" stroke="#5ab9fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="43" y="69" width="14" height="14" rx="4" stroke="#43566e"/>
+              <path d="M66 76h43m-43 12h26" stroke="#43566e" stroke-width="2" stroke-linecap="round"/>
+              <path d="M160 65h12m-12 15h20M16 48h12M6 63h22" stroke="#30455b" stroke-linecap="round"/>
+            </svg>
+            <h3 id="empty-title">No review yet</h3>
+            <p id="empty-detail">Run a review to see potential gaps, Microsoft Learn references, and questions for the architect.</p>
+          </div>
+          <div id="report-content" hidden>
+            <dl class="metrics" id="metrics"></dl>
+            <div id="findings"></div>
+            <section class="overall" aria-labelledby="feedback-title">
+              <h3 id="feedback-title">Architect feedback</h3>
+              <div id="overall-rating"></div>
+              <div class="field">
+                <label for="review-note">Missed issue or comment</label>
+                <textarea id="review-note" rows="2" maxlength="1000" aria-describedby="feedback-note"></textarea>
+              </div>
+              <p class="muted" id="feedback-note">Feedback stays in this tab until you start a new review.</p>
+            </section>
+          </div>
+        </div>
+        <footer class="report-footer">First-pass assessment only. An architect makes the final decision.</footer>
+      </section>
+    </div>
+
+    <details class="guidance" id="guidance">
+      <summary>Microsoft Learn guidance</summary>
+      <ul class="sources" id="sources"></ul>
+    </details>
+    <p class="sr-only" role="status" id="status"></p>
+  </main>
+
+  <template id="finding-template">
+    <details class="finding">
+      <summary>
+        <span class="finding-head">
+          <span class="finding-meta"><span class="severity"></span><span class="category"></span></span>
+          <span class="finding-title"></span>
+        </span>
+      </summary>
+      <div class="finding-body">
+        <div class="finding-part" data-part="evidence">
+          <h3>Evidence from the brief</h3>
+          <blockquote></blockquote>
+        </div>
+        <div class="finding-part" data-part="action">
+          <h3>Recommended action</h3>
+          <p></p>
+        </div>
+        <div class="finding-part" data-part="question">
+          <h3>Clarification question</h3>
+          <p></p>
+        </div>
+        <div class="finding-part">
+          <h3>Microsoft Learn guidance</h3>
+          <p class="finding-guidance"></p>
+          <a class="finding-source" target="_blank" rel="noopener noreferrer"></a>
+        </div>
+        <div class="finding-rating"></div>
+      </div>
+    </details>
+  </template>
+</body>
+</html>
