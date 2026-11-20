@@ -41,6 +41,9 @@ Use the **sandbox** Entra account and subscription, not your personal Azure envi
    ```
 
 3. Use the existing **Linux Node.js 22+ App Service** in the sandbox. Configure [App Service Authentication with Microsoft Entra ID](https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad) to **Require authentication**, limit access to the intended sandbox users, and require HTTPS before deploying. Enable the app's **system-assigned managed identity** and give it **Cognitive Services OpenAI User** on the parent Foundry resource. Set `REVIEW_MODE=foundry`, `AZURE_OPENAI_ENDPOINT`, and `AZURE_OPENAI_DEPLOYMENT` as App Service settings. The hosted app uses managed identity, not Azure CLI or API keys.
+
+   If you create the Entra app registration manually and App Service requests `code id_token`, enable **ID tokens** under **App registrations > Authentication > Implicit grant and hybrid flows**. Leave **Access tokens** off. Start a new sign-in from the app URL instead of refreshing `/.auth/login/aad/callback`.
+
 4. Set the Linux startup command to `npm start` and the app setting `SCM_DO_BUILD_DURING_DEPLOYMENT=true`. [Deploy a ZIP](https://learn.microsoft.com/azure/app-service/deploy-zip) with `package.json`, `package-lock.json`, `server.js`, `review.js`, `foundry.js`, and `public/` at its root. Exclude `.env`, `node_modules/`, and anything containing credentials. Open the app after signing in, run the synthetic example, and verify that the report shows **Microsoft Foundry** mode and token counts.
 
 ## PoC boundaries
