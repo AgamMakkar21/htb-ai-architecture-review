@@ -13,9 +13,9 @@ npm.cmd start
 
 Open [http://127.0.0.1:3000](http://127.0.0.1:3000), select **Load example**, then **Run review**. The synthetic policy assistant produces five gaps. Open the identity finding, compare the architecture quote with the Microsoft Learn source, and mark the finding **Helpful**. To demonstrate a missing detail, replace the architecture with `An internal assistant runs on Azure App Service.`, select only **Reliability**, and run again. The result is a question, not an asserted gap.
 
-The default **Local checklist** runs without Azure credentials or model calls. It matches a few patterns and asks for clarification on the remaining categories; it does not reason over the design. **Microsoft Foundry** mode uses a deployed model to assess the brief and returns its latency and token usage. The optional rate settings in [.env.example](.env.example) add an estimate of model cost only, not hosting or total pilot cost.
+The default **Local checklist** runs without Azure credentials or network calls. It matches a few patterns rather than reasoning over the design. **Microsoft Foundry** mode looks up current Microsoft Learn docs for the workload, then uses a deployed model to assess the brief. The report shows review latency and model token usage. The optional rate settings in [.env.example](.env.example) estimate model cost only, not hosting or total pilot cost.
 
-Run `npm.cmd test` for the local workflow and Foundry contract checks. The contract tests use a stub; they do not call Azure.
+Run `npm.cmd test` for the local workflow, documentation lookup, and Foundry contract checks. The tests stub the external services.
 
 ## Use the verified Hack-to-Build sandbox
 
@@ -46,10 +46,10 @@ Use the **sandbox** Entra account and subscription, not your personal Azure envi
 
    Keep `Referrer-Policy: same-origin` so App Service Authentication can verify the signed-in review POST. The browser still withholds the referrer from external sites.
 
-4. Set the Linux startup command to `npm start` and the app setting `SCM_DO_BUILD_DURING_DEPLOYMENT=true`. [Deploy a ZIP](https://learn.microsoft.com/azure/app-service/deploy-zip) with `package.json`, `package-lock.json`, `server.js`, `review.js`, `foundry.js`, and `public/` at its root. Exclude `.env`, `node_modules/`, and anything containing credentials. Open the app after signing in, run the synthetic example, and verify that the report shows **Microsoft Foundry** mode and token counts.
+4. Set the Linux startup command to `npm start` and the app setting `SCM_DO_BUILD_DURING_DEPLOYMENT=true`. [Deploy a ZIP](https://learn.microsoft.com/azure/app-service/deploy-zip) with `package.json`, `package-lock.json`, `server.js`, `review.js`, `foundry.js`, `learn.js`, and `public/` at its root. Exclude `.env`, `node_modules/`, and anything containing credentials. Open the app after signing in and run the synthetic example. The report should show **Microsoft Learn (live)**, linked docs, and model token counts. Learn MCP needs outbound HTTPS to `learn.microsoft.com`, not another Azure resource or credential.
 
 ## PoC boundaries
 
-The Node app sends the selected Microsoft Learn summaries and the brief to the [Foundry Responses API](https://learn.microsoft.com/azure/foundry/openai/how-to/responses) with a JSON schema and `store: false` to disable response storage by the API. It checks that evidence is quoted from the brief and attaches the citation for each selected check itself. An architect still verifies that the quote and guidance support the finding.
+The Node app searches the [Microsoft Learn MCP Server](https://learn.microsoft.com/training/support/mcp) for each selected category using recognized public Azure service names or general workload terms. It never sends brief text to Learn and only uses official documentation results. It sends the retrieved excerpts and the brief to the [Foundry Responses API](https://learn.microsoft.com/azure/foundry/openai/how-to/responses) with a JSON schema and `store: false` to disable response storage by the API. For each gap, the server verifies the evidence quote and attaches the cited excerpt and its original link. If Learn is unavailable, live mode reports the error rather than falling back to the static checklist. An architect still verifies that the quote and guidance support the finding.
 
 There is no database, Agent Service project, or Azure AI Search dependency. The app does not persist briefs or log prompt content; form inputs, findings, and feedback are held in the open tab. Feedback resets with a new review. Live mode sends the submitted text to the configured Foundry resource, so use only synthetic or sanitized material. Pilot quality targets and time saved are not measured by this PoC.

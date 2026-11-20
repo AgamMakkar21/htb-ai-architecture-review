@@ -41,6 +41,15 @@ function sourceLink(link, source) {
   return link;
 }
 
+function renderSources(sources) {
+  $('guidance').hidden = sources.length === 0;
+  $('sources').replaceChildren(...sources.map((source) => {
+    const item = node('li');
+    item.append(sourceLink(node('a'), source));
+    return item;
+  }));
+}
+
 function rating(label) {
   const group = node('div');
   group.className = 'rating';
@@ -74,14 +83,17 @@ function findingCard(finding, open) {
     section.hidden = !finding[part];
     section.lastElementChild.textContent = finding[part] ?? '';
   }
-  card.querySelector('.finding-guidance').textContent = finding.source.guidance;
-  sourceLink(card.querySelector('.finding-source'), finding.source);
+  card.querySelector('.finding-citation').hidden = !finding.source;
+  if (finding.source) {
+    card.querySelector('.finding-guidance').textContent = finding.source.guidance;
+    sourceLink(card.querySelector('.finding-source'), finding.source);
+  }
   card.querySelector('.finding-rating').append(rating(`Rate the ${category} finding`));
   return card;
 }
 
 function render(result) {
-  const { findings, deployment, usage, latencyMs } = result;
+  const { findings, deployment, usage, latencyMs, sources } = result;
   const questions = findings.filter(({ severity }) => severity === 'question').length;
   const gaps = findings.length - questions;
   const counts = `${gaps} ${gaps === 1 ? 'gap' : 'gaps'} / ${questions} ${questions === 1 ? 'question' : 'questions'}`;
@@ -90,6 +102,10 @@ function render(result) {
     ['Reviews this tab', String(++completed)],
   ];
   if (deployment) metrics.push(['Model deployment', deployment]);
+  if (sources) {
+    metrics.push(['Guidance', 'Microsoft Learn (live)']);
+    renderSources(sources);
+  }
   if (usage) {
     metrics.push(['Input / output tokens', `${usage.inputTokens.toLocaleString()} / ${usage.outputTokens.toLocaleString()}`]);
     if (usage.estimatedUsd !== null) metrics.push(['Estimated model cost', `$${usage.estimatedUsd.toFixed(6)} USD`]);
@@ -148,7 +164,10 @@ form.addEventListener('submit', async (event) => {
   report.hidden = true;
   $('report-count').textContent = '';
   $('empty-title').textContent = 'Review in progress';
-  $('empty-detail').textContent = `Checking the brief with ${modeLabel[config.mode]}.`;
+  $('empty-detail').textContent = config.mode === 'foundry'
+    ? 'Looking up Microsoft Learn guidance and reviewing the brief with Foundry.'
+    : 'Checking the brief with the local checklist.';
+  if (config.mode === 'foundry') renderSources([]);
   $('empty').hidden = false;
   $('report-body').setAttribute('aria-busy', 'true');
   $('status').textContent = 'Review in progress.';
@@ -175,12 +194,12 @@ try {
   $('mode').dataset.mode = config.mode;
   $('mode-label').textContent = modeLabel[config.mode];
   $('data-notice').textContent = config.mode === 'foundry'
-    ? 'Synthetic or sanitized text only. Sent to your Foundry deployment.'
+    ? 'Use synthetic or sanitized text. Foundry receives the brief; Learn receives only public service and topic terms.'
     : 'Synthetic or sanitized text only. No model calls in this mode.';
   $('workload').append(...Object.entries(config.workloads).map(([id, name]) => new Option(name, id)));
   $('architecture').maxLength = config.limits.architecture;
   $('requirements').maxLength = config.limits.requirements;
-  for (const { id, label, source } of config.rubric) {
+  for (const { id, label } of config.rubric) {
     const option = node('label');
     const checkbox = node('input');
     checkbox.type = 'checkbox';
@@ -189,10 +208,8 @@ try {
     checkbox.checked = true;
     option.append(checkbox, label);
     categoryList.append(option);
-    const item = node('li');
-    item.append(sourceLink(node('a'), source));
-    $('sources').append(item);
   }
+  if (config.mode === 'local') renderSources(config.rubric.map(({ source }) => source));
   fields.disabled = run.disabled = load.disabled = false;
 } catch (failure) {
   $('mode-label').textContent = 'Unavailable';

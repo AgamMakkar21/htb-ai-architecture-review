@@ -53,7 +53,8 @@ async function readJson(req) {
 
 export function createApp({ mode = 'local', deployment = null, review, appService = false } = {}) {
   const config = {
-    mode, deployment, rubric: rubric.map(({ id, label, source }) => ({ id, label, source })),
+    mode, deployment, rubric: rubric.map(({ id, label, source }) =>
+      mode === 'local' ? { id, label, source } : { id, label }),
     limits, workloads, scenario,
   };
   return createServer(async (req, res) => {
@@ -73,12 +74,12 @@ export function createApp({ mode = 'local', deployment = null, review, appServic
       if (req.method === 'POST' && path === '/api/review') {
         const brief = readBrief(await readJson(req));
         const start = performance.now();
-        const { findings, usage } = mode === 'foundry'
+        const { findings, usage, sources } = mode === 'foundry'
           ? await review(brief)
           : { findings: localFindings(brief), usage: null };
         findings.sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
         return json(res, 200, {
-          id: randomUUID(), mode, deployment, findings, usage,
+          id: randomUUID(), mode, deployment, findings, usage, sources,
           latencyMs: Math.round(performance.now() - start),
         });
       }

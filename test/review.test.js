@@ -2,10 +2,19 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import test from 'node:test';
 import { configureFoundry, foundryReviewer } from '../foundry.js';
-import { readBrief, rubric, scenario } from '../review.js';
+import { lookupLearn } from '../learn.js';
+import { readBrief, scenario } from '../review.js';
 import { createApp } from '../server.js';
 
 const endpoint = 'https://sandbox.services.ai.azure.com/openai/v1/responses';
+const identitySource = {
+  id: 'identity-1',
+  category: 'identity',
+  title: 'Search roles',
+  url: 'https://learn.microsoft.com/azure/search/search-security-rbac#assign-built-in-roles',
+  excerpt: 'Use Search Index Data Reader for queries that only need read access to an index.',
+};
+const lookup = async () => [identitySource];
 
 test('the local app runs the example and asks questions when details are missing', async (t) => {
   const server = createApp().listen(0, '127.0.0.1');
@@ -44,7 +53,30 @@ test('the local app runs the example and asks questions when details are missing
   assert.match((await invalid.json()).error, /review categories/);
 });
 
-test('Foundry receives a bounded rubric and returns a cited finding and model usage', async () => {
+test('Learn searches for each workload using public terms and keeps official docs only', async () => {
+  for (const [service, workload] of [['Azure AI Search', 'rag'], ['Azure AI Document Intelligence', 'documents']]) {
+    const brief = readBrief({
+      architecture: `Use ${service}. Internal design marker: confidential-project-name.`,
+      requirements: 'Private requirement: confidential-workload-detail.',
+      workload, categories: ['identity'],
+    });
+    const sources = await lookupLearn(brief, async (queries) => {
+      assert.equal(queries.length, 1);
+      assert.ok(queries[0].includes(service));
+      assert.doesNotMatch(queries[0], /confidential|private requirement/i);
+      return [[
+        { title: 'Documentation', contentUrl: identitySource.url, content: identitySource.excerpt },
+        { title: 'Community', contentUrl: 'https://learn.microsoft.com/answers/a/123', content: 'Not official docs.' },
+        { title: 'Other site', contentUrl: 'https://example.invalid/azure/search/search-security-rbac', content: 'Not Learn.' },
+      ]];
+    });
+    assert.deepEqual(sources.map(({ url, excerpt }) => ({ url, excerpt })), [
+      { url: identitySource.url, excerpt: identitySource.excerpt },
+    ]);
+  }
+});
+
+test('Foundry receives retrieved guidance and returns a server-assigned citation and model usage', async () => {
   const brief = readBrief({ ...scenario, categories: ['identity'] });
   const config = configureFoundry({
     AZURE_OPENAI_ENDPOINT: endpoint,
@@ -55,6 +87,7 @@ test('Foundry receives a bounded rubric and returns a cited finding and model us
   const evaluate = foundryReviewer({
     ...config,
     getToken: async () => 'test-token',
+    lookup,
     request: async (url, options) => {
       assert.equal(url, endpoint);
       assert.equal(options.headers.authorization, 'Bearer test-token');
@@ -64,26 +97,37 @@ test('Foundry receives a bounded rubric and returns a cited finding and model us
       assert.deepEqual(request.text.format.schema.properties.findings.items.properties.category.enum, ['identity']);
       assert.equal(request.store, false);
       assert.ok(!request.instructions.includes(brief.architecture));
-      assert.equal(JSON.parse(request.input).architecture, brief.architecture);
+      const input = JSON.parse(request.input);
+      assert.equal(input.architecture, brief.architecture);
+      assert.deepEqual(input.sources, [{ id: identitySource.id, category: 'identity', excerpt: identitySource.excerpt }]);
       return Response.json(modelResult('The application uses a shared admin key to query Search'));
     },
   });
   const report = await evaluate(brief);
-  assert.equal(report.findings[0].source.url, rubric[0].source.url);
+  assert.deepEqual(report.findings[0].source, {
+    title: identitySource.title, url: identitySource.url, guidance: identitySource.excerpt,
+  });
+  assert.deepEqual(report.sources, [{ title: identitySource.title, url: identitySource.url }]);
   assert.deepEqual(report.usage, { inputTokens: 100, outputTokens: 20, estimatedUsd: 0.00014 });
 });
 
-test('Foundry output with fabricated evidence is not returned as a successful review', async () => {
-  const evaluate = foundryReviewer({
-    endpoint,
-    deployment: 'review-deployment',
-    getToken: async () => 'test-token',
-    request: async () => Response.json(modelResult('The model accepts anonymous requests.')),
-  });
-  await assert.rejects(evaluate(readBrief({ ...scenario, categories: ['identity'] })), {
-    status: 502,
-    message: /evidence checks/,
-  });
+test('Foundry output with fabricated evidence or an unknown citation is rejected', async () => {
+  for (const result of [
+    modelResult('The model accepts anonymous requests.'),
+    modelResult('The application uses a shared admin key to query Search', 'identity-99'),
+  ]) {
+    const evaluate = foundryReviewer({
+      endpoint,
+      deployment: 'review-deployment',
+      getToken: async () => 'test-token',
+      lookup,
+      request: async () => Response.json(result),
+    });
+    await assert.rejects(evaluate(readBrief({ ...scenario, categories: ['identity'] })), {
+      status: 502,
+      message: /evidence or citation checks/,
+    });
+  }
 });
 
 test('Foundry refusals and incomplete outputs do not become reviews', async () => {
@@ -100,13 +144,14 @@ test('Foundry refusals and incomplete outputs do not become reviews', async () =
       endpoint,
       deployment: 'review-deployment',
       getToken: async () => 'test-token',
+      lookup,
       request: async () => Response.json(result),
     });
     await assert.rejects(evaluate(brief), { status: 502, message });
   }
 });
 
-function modelResult(evidence) {
+function modelResult(evidence, sourceId = identitySource.id) {
   return {
     status: 'completed',
     output: [{ type: 'reasoning', summary: [] }, {
@@ -119,7 +164,7 @@ function modelResult(evidence) {
         evidence,
         action: 'Use a managed identity scoped to Search Index Data Reader.',
         question: null,
-        source: { url: 'https://example.invalid' },
+        sourceId,
       }] }) }],
     }],
     usage: { input_tokens: 100, output_tokens: 20 },
