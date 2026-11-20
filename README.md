@@ -44,6 +44,8 @@ Use the **sandbox** Entra account and subscription, not your personal Azure envi
 
    If you create the Entra app registration manually and App Service requests `code id_token`, enable **ID tokens** under **App registrations > Authentication > Implicit grant and hybrid flows**. Leave **Access tokens** off. Start a new sign-in from the app URL instead of refreshing `/.auth/login/aad/callback`.
 
+   Keep `Referrer-Policy: same-origin` so App Service Authentication can verify the signed-in review POST. The browser still withholds the referrer from external sites.
+
 4. Set the Linux startup command to `npm start` and the app setting `SCM_DO_BUILD_DURING_DEPLOYMENT=true`. [Deploy a ZIP](https://learn.microsoft.com/azure/app-service/deploy-zip) with `package.json`, `package-lock.json`, `server.js`, `review.js`, `foundry.js`, and `public/` at its root. Exclude `.env`, `node_modules/`, and anything containing credentials. Open the app after signing in, run the synthetic example, and verify that the report shows **Microsoft Foundry** mode and token counts.
 
 ## PoC boundaries

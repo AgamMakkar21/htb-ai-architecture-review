@@ -16,7 +16,8 @@ const maxBytes = 64 * 1024;
 const headers = {
   'cache-control': 'no-store',
   'content-security-policy': "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'",
-  'referrer-policy': 'no-referrer',
+  // App Service Authentication checks the referrer on signed-in browser POSTs.
+  'referrer-policy': 'same-origin',
   'x-content-type-options': 'nosniff',
 };
 
