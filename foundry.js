@@ -105,9 +105,9 @@ function readPrice(value, name) {
 export function configureFoundry(env, appService) {
   const url = URL.parse(env.AZURE_OPENAI_ENDPOINT ?? '');
   if (!url || url.protocol !== 'https:' || url.username || url.password || url.port || url.search || url.hash ||
-      !/^\/api\/projects\/[\w-]+\/openai\/v1\/responses\/?$/.test(url.pathname) ||
+      !/^(?:\/api\/projects\/[\w-]+)?\/openai\/v1\/responses\/?$/.test(url.pathname) ||
       !/^[a-z0-9-]+\.services\.ai\.azure\.com$/.test(url.hostname)) {
-    throw new Error('Set AZURE_OPENAI_ENDPOINT to the full sandbox Foundry project URL ending in /openai/v1/responses.');
+    throw new Error('Set AZURE_OPENAI_ENDPOINT to the full sandbox Foundry URL ending in /openai/v1/responses.');
   }
   const deployment = env.AZURE_OPENAI_DEPLOYMENT?.trim();
   if (!deployment) throw new Error('Set AZURE_OPENAI_DEPLOYMENT to the sandbox model deployment name.');

@@ -19,10 +19,10 @@ Run `npm.cmd test` for the local workflow and Foundry contract checks. The contr
 
 ## Use the verified Hack-to-Build sandbox
 
-Use the **sandbox** Entra account and subscription, not your personal Azure environment. The app needs the full **Foundry project Responses endpoint**, the **model deployment name**, and an authorized identity. Do not copy passwords, tokens, or API keys into the repo or chat.
+Use the **sandbox** Entra account and subscription, not your personal Azure environment. The app needs the full **Foundry Responses endpoint**, the **model deployment name**, and an authorized identity. Do not copy passwords, tokens, or API keys into the repo or chat.
 
-1. Reuse an Azure OpenAI deployment that supports [Responses](https://learn.microsoft.com/azure/foundry/openai/how-to/responses) and [structured outputs](https://learn.microsoft.com/azure/foundry/openai/how-to/structured-outputs), such as `gpt-6.1-terra`. Copy the endpoint ending in `/api/projects/<project>/openai/v1/responses` and the deployment's **Name** from Foundry. The deployment name can differ from the model name.
-2. To test locally, give your sandbox user **Cognitive Services OpenAI User** on the parent Foundry resource as described in the [project Responses guidance](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/generate-responses#troubleshoot-common-errors). Use an isolated CLI profile in the same PowerShell window that will run the app:
+1. Reuse an Azure OpenAI deployment that supports [Responses](https://learn.microsoft.com/azure/foundry/openai/how-to/responses) and [structured outputs](https://learn.microsoft.com/azure/foundry/openai/how-to/structured-outputs), such as `gpt-6.1-terra`. Copy the deployment's **Name** from Foundry; it can differ from the model name. Use the resource endpoint `https://<sandbox-resource>.services.ai.azure.com/openai/v1/responses`. The app also accepts the project route, but the sandbox deployment uses the resource route because the project route returned HTTP 403 with the inference role below.
+2. To test locally, give your sandbox user [**Cognitive Services OpenAI User**](https://learn.microsoft.com/azure/foundry/openai/how-to/role-based-access-control) on the Foundry resource. Use an isolated CLI profile in the same PowerShell window that will run the app:
 
    ```powershell
    $env:AZURE_CONFIG_DIR = Join-Path $env:LOCALAPPDATA 'azure-htb-sandbox'
@@ -35,7 +35,7 @@ Use the **sandbox** Entra account and subscription, not your personal Azure envi
 
    ```powershell
    $env:REVIEW_MODE = 'foundry'
-   $env:AZURE_OPENAI_ENDPOINT = 'https://<sandbox-resource>.services.ai.azure.com/api/projects/<sandbox-project>/openai/v1/responses'
+   $env:AZURE_OPENAI_ENDPOINT = 'https://<sandbox-resource>.services.ai.azure.com/openai/v1/responses'
    $env:AZURE_OPENAI_DEPLOYMENT = '<sandbox-deployment-name>'
    npm.cmd start
    ```
@@ -45,6 +45,6 @@ Use the **sandbox** Entra account and subscription, not your personal Azure envi
 
 ## PoC boundaries
 
-The Node app sends the selected Microsoft Learn summaries and the brief to the [Foundry project Responses API](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/generate-responses) with a JSON schema and `store: false` to disable response storage by the API. It checks that evidence is quoted from the brief and attaches the citation for each selected check itself. An architect still verifies that the quote and guidance support the finding.
+The Node app sends the selected Microsoft Learn summaries and the brief to the [Foundry Responses API](https://learn.microsoft.com/azure/foundry/openai/how-to/responses) with a JSON schema and `store: false` to disable response storage by the API. It checks that evidence is quoted from the brief and attaches the citation for each selected check itself. An architect still verifies that the quote and guidance support the finding.
 
 There is no database, Agent Service project, or Azure AI Search dependency. The app does not persist briefs or log prompt content; form inputs, findings, and feedback are held in the open tab. Feedback resets with a new review. Live mode sends the submitted text to the configured Foundry resource, so use only synthetic or sanitized material. Pilot quality targets and time saved are not measured by this PoC.

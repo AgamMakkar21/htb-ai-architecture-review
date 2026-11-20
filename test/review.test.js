@@ -5,7 +5,7 @@ import { configureFoundry, foundryReviewer } from '../foundry.js';
 import { readBrief, rubric, scenario } from '../review.js';
 import { createApp } from '../server.js';
 
-const endpoint = 'https://sandbox.services.ai.azure.com/api/projects/sandbox-proj/openai/v1/responses';
+const endpoint = 'https://sandbox.services.ai.azure.com/openai/v1/responses';
 
 test('the local app runs the example and asks questions when details are missing', async (t) => {
   const server = createApp().listen(0, '127.0.0.1');
